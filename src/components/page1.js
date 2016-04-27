@@ -6,7 +6,7 @@ function intent(sources) {
     responses$$: sources.HTTP,
     request$:  Observable.just({
       url: 'http://jsonplaceholder.typicode.com/users/3',
-      category: 'users2',
+      category: 'users3',
       method: 'GET'
     })
   }
@@ -36,7 +36,7 @@ function view(state$) {
     );
 }
 
-function Home(sources) {
+function Page1(sources) {
   const actions = intent(sources);
   const state$ = model(actions);
   const vtree$ = view(state$);
@@ -50,4 +50,4 @@ function Home(sources) {
   return sink$;
 }
 
-export default Home;
+export default Page1;

@@ -1,39 +1,71 @@
-import {Observable} from 'rx';
+import Rx from 'rx';
 import {div, h1, h2} from 'cycle-snabbdom';
 
+const LABEL_REQUEST_USER_2 = 'users_2';
+
+var initialState = {
+  foo: '',
+  user2: {
+    email: 'loading ...'
+  }
+};
+
+const Actions = {
+  SetUser2: user => state => {
+    state.user2 = user;
+    return state;
+  }
+}
+
 function intent(sources) {
+  // make call to that url
+  const user2HttpRequest$ = Rx.Observable.just({
+    url: 'http://jsonplaceholder.typicode.com/users/2',
+    method: 'GET',
+    label: LABEL_REQUEST_USER_2
+  });
+
+  // merge all http requests in one stream
+  const httpRequest$ = Rx.Observable.merge(
+    user2HttpRequest$
+  );
+
   return {
-    responses$$: sources.HTTP,
-    request$:  Observable.just({
-      url: 'http://jsonplaceholder.typicode.com/users/2',
-      category: 'users2',
-      method: 'GET'
-    })
+    httpRequest$,
+    httpResponses$$: sources.HTTP
   }
 }
 
 function model(actions) {
-  const response$$ = actions.responses$$
-    .filter(res$ => res$.request.category === 'users2');
-  const response$ = response$$.mergeAll();
+  // filter our httpResponse
+  const user2HttpResponse$ = actions.httpResponses$$
+    .filter(res$ => res$.request.label === LABEL_REQUEST_USER_2)
+    .mergeAll();
 
-  const state$ = response$
-    .map(res => res.body)
-    .startWith(null);
+  const user2ReceivedAction$ = user2HttpResponse$
+    .map(response => Actions.SetUser2(response.body));
+
+  // merge all actions and prepate state
+  const state$ = Rx.Observable
+    .merge(user2ReceivedAction$)
+    .scan((state, operation) => operation(state), initialState);
 
   return state$;
 }
 
 function view(state$) {
-  return state$
-    .map(user =>
+  const vtree$ = state$
+    .startWith(initialState)
+    .map(state =>
       div([
         h1('Home Page'),
         div([
-          user === null ? null : h2(user.name)
+          state.user2 === {} ? h1('foo') : h2(state.user2.email)
         ])
       ])
     );
+
+  return vtree$;
 }
 
 function Home(sources) {
@@ -43,8 +75,9 @@ function Home(sources) {
 
   const sink$ = {
     DOM: vtree$,
-    HTTP: actions.request$,
-    router: sources.router
+    HTTP: actions.httpRequest$,
+    // share value with parent
+    value$: state$.pluck('user2')
   }
 
   return sink$;

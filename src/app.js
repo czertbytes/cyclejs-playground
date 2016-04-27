@@ -1,27 +1,69 @@
 import Rx from 'rx';
-import {h, div, h1, ul, li } from 'cycle-snabbdom';
+import {h, div, h1, h2, ul, li } from 'cycle-snabbdom';
 
 import Home from './components/home';
 import Page1 from './components/page1';
-import Signin from './components/signin';
 
 const ROUTES = {
   '/': Home,
   '/page1': Page1
 };
 
+const LABEL_REQUEST_USER_1 = 'users_1';
+
+var initialState = {
+  child: Home,
+  session: {
+    signed: false,
+    token: ''
+  },
+  user1: {
+    name: 'loading ...'
+  }
+};
+
+const Actions = {
+  Render: child => state => {
+    state.child = child;
+    return state;
+  },
+  ChildFoo: token => state => {
+    state.session.token = token;
+    return state;
+  },
+  SetUser1: user => state => {
+    state.user1 = user;
+    return state;
+  }
+};
+
 function intent(sources) {
   const {router} = sources;
   const match$ = router.define(ROUTES);
 
-  const children$ = match$.map(
-    ({path, value}) => value( {
-      router: router.path(path),
-      ...sources
-    })
+  // match the url and create child
+  const children$ = match$
+    .map(({path, value}) => value({
+        ...sources,
+        router: router.path(path)
+      }));
+
+  // make call to that url
+  const user1HttpRequest$ = Rx.Observable.just({
+    url: 'http://jsonplaceholder.typicode.com/users/1',
+    method: 'GET',
+    label: LABEL_REQUEST_USER_1
+  });
+
+  // merge all http requests in one stream
+  const httpRequest$ = Rx.Observable.merge(
+    user1HttpRequest$,
+    children$.flatMapLatest(child => child.HTTP || Rx.Observable.empty())
   );
 
   const actions = {
+    httpRequest$,
+    httpResponses$$: sources.HTTP,
     children$
   }
 
@@ -29,49 +71,54 @@ function intent(sources) {
 }
 
 function model(actions) {
-  const child$ = actions.children$.map(child => child);
-  const foo$ = Rx.Observable.just('foo');
+  // filter our httpResponse
+  const user1HttpResponse$ = actions.httpResponses$$
+    .filter(res$ => res$.request.label === LABEL_REQUEST_USER_1)
+    .mergeAll();
 
-  const state$ = Rx.Observable.combineLatest(
-    child$,
-    foo$,
-    (child, foo) => ({child, foo})
-  );
+  const user1ReceivedAction$ = user1HttpResponse$
+    .map(response => Actions.SetUser1(response.body));
+
+  // current child
+  const currentChild$ = actions.children$
+    .map(child => child);
+
+  // state value from current child
+  const currentChildFooAction$ = currentChild$
+    .flatMap(({value$}) => value$)
+    .map(value => Actions.ChildFoo(value.email));
+
+  // render current child
+  const currentChildAction$ = currentChild$
+    .map(child => Actions.Render(child));
+
+  // merge all actions and prepare state
+  const state$ = Rx.Observable
+    .merge(
+      user1ReceivedAction$,
+      currentChildFooAction$,
+      currentChildAction$)
+    .scan((state, operation) => operation(state), initialState);
 
   return state$;
 }
 
 function view(state$) {
-  return state$.map(({child}) =>
-    div([
-      renderHeader(child.router),
-      renderSignin(),
-      renderPage(child)
-    ])
-  );
-}
+  const vtree$ = state$
+    .startWith(initialState)
+    .map(state => {
+      let {child} = state;
+      let {session: {token: tokenValue}} = state;
+      let {user1: {name: nameValue}} = state;
 
-function renderHeader(router) {
-  const createHref = router.createHref;
+      return div([
+        h1(`From Child: Token is: ${tokenValue}`),
+        h2(`App value: ${nameValue}`),
+        child.DOM
+      ]);
+    });
 
-  return div([
-    ul([
-      li([
-        h('a', {props: {href: createHref('/') }}, 'Home')
-      ]),
-      li([
-        h('a', {props: {href: createHref('/page1') }}, 'Page1')
-      ])
-    ])
-  ])
-}
-
-function renderPage(child) {
-  return child.DOM;
-}
-
-function renderSignin() {
-  return h1('signin');
+  return vtree$;
 }
 
 function App(sources) {
@@ -81,6 +128,7 @@ function App(sources) {
 
   const sink$ = {
     DOM: vtree$,
+    HTTP: actions.httpRequest$
   };
 
   return sink$;
