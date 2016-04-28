@@ -13,12 +13,14 @@ const LABEL_REQUEST_USER_1 = 'users_1';
 
 var initialState = {
   child: Home,
-  session: {
-    signed: false,
-    token: ''
+  app: {
+    foo: 'loading ...'
   },
-  user1: {
-    name: 'loading ...'
+  home: {
+    foo: 'loading ...'
+  },
+  page1: {
+    foo: 'loading ...'
   }
 };
 
@@ -27,12 +29,16 @@ const Actions = {
     state.child = child;
     return state;
   },
-  ChildFoo: token => state => {
-    state.session.token = token;
+  SetAppState: app => state => {
+    state.app.foo = app.email;
     return state;
   },
-  SetUser1: user => state => {
-    state.user1 = user;
+  SetHomeState: home => state => {
+    state.home.foo = home.email;
+    return state;
+  },
+  SetPage1State: page1 => state => {
+    state.page1.foo = page1.email;
     return state;
   }
 };
@@ -49,7 +55,7 @@ function intent(sources) {
       }));
 
   // make call to that url
-  const user1HttpRequest$ = Rx.Observable.just({
+  const userHttpRequest$ = Rx.Observable.just({
     url: 'http://jsonplaceholder.typicode.com/users/1',
     method: 'GET',
     label: LABEL_REQUEST_USER_1
@@ -57,7 +63,7 @@ function intent(sources) {
 
   // merge all http requests in one stream
   const httpRequest$ = Rx.Observable.merge(
-    user1HttpRequest$,
+    userHttpRequest$,
     children$.flatMapLatest(child => child.HTTP || Rx.Observable.empty())
   );
 
@@ -72,12 +78,12 @@ function intent(sources) {
 
 function model(actions) {
   // filter our httpResponse
-  const user1HttpResponse$ = actions.httpResponses$$
+  const userHttpResponse$ = actions.httpResponses$$
     .filter(res$ => res$.request.label === LABEL_REQUEST_USER_1)
     .mergeAll();
 
-  const user1ReceivedAction$ = user1HttpResponse$
-    .map(response => Actions.SetUser1(response.body));
+  const userReceivedAction$ = userHttpResponse$
+    .map(response => Actions.SetAppState(response.body));
 
   // current child
   const currentChild$ = actions.children$
@@ -85,8 +91,17 @@ function model(actions) {
 
   // state value from current child
   const currentChildFooAction$ = currentChild$
-    .flatMap(({value$}) => value$)
-    .map(value => Actions.ChildFoo(value.email));
+    .flatMap(({state$}) => state$)
+    .map(state => {
+      switch (state.origin) {
+        case 'home':
+          return Actions.SetHomeState(state.foo);
+        case 'page1':
+          return Actions.SetPage1State(state.foo);
+        default:
+          console.log(`Unknown child state origin ${state.origin}`);
+      }
+    });
 
   // render current child
   const currentChildAction$ = currentChild$
@@ -95,7 +110,7 @@ function model(actions) {
   // merge all actions and prepare state
   const state$ = Rx.Observable
     .merge(
-      user1ReceivedAction$,
+      userReceivedAction$,
       currentChildFooAction$,
       currentChildAction$)
     .scan((state, operation) => operation(state), initialState);
@@ -108,12 +123,14 @@ function view(state$) {
     .startWith(initialState)
     .map(state => {
       let {child} = state;
-      let {session: {token: tokenValue}} = state;
-      let {user1: {name: nameValue}} = state;
+      let {app: {foo: appFooValue}} = state;
+      let {home: {foo: homeFooValue}} = state;
+      let {page1: {foo: page1FooValue}} = state;
 
       return div([
-        h1(`From Child: Token is: ${tokenValue}`),
-        h2(`App value: ${nameValue}`),
+        h1(`App value: ${appFooValue}`),
+        h2(`Value from Home: ${homeFooValue}`),
+        h2(`Value from Page1: ${page1FooValue}`),
         child.DOM
       ]);
     });

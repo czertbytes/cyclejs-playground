@@ -1,25 +1,24 @@
 import Rx from 'rx';
-import {div, h1, h2} from 'cycle-snabbdom';
+import {div, h1, h2, button} from 'cycle-snabbdom';
 
 const LABEL_REQUEST_USER_2 = 'users_2';
 
 var initialState = {
-  foo: '',
-  user2: {
+  user: {
     email: 'loading ...'
   }
 };
 
 const Actions = {
-  SetUser2: user => state => {
-    state.user2 = user;
+  SetUser: user => state => {
+    state.user = user;
     return state;
   }
 }
 
 function intent(sources) {
   // make call to that url
-  const user2HttpRequest$ = Rx.Observable.just({
+  const userHttpRequest$ = Rx.Observable.just({
     url: 'http://jsonplaceholder.typicode.com/users/2',
     method: 'GET',
     label: LABEL_REQUEST_USER_2
@@ -27,7 +26,7 @@ function intent(sources) {
 
   // merge all http requests in one stream
   const httpRequest$ = Rx.Observable.merge(
-    user2HttpRequest$
+    userHttpRequest$
   );
 
   return {
@@ -38,16 +37,16 @@ function intent(sources) {
 
 function model(actions) {
   // filter our httpResponse
-  const user2HttpResponse$ = actions.httpResponses$$
+  const userHttpResponse$ = actions.httpResponses$$
     .filter(res$ => res$.request.label === LABEL_REQUEST_USER_2)
     .mergeAll();
 
-  const user2ReceivedAction$ = user2HttpResponse$
-    .map(response => Actions.SetUser2(response.body));
+  const userReceivedAction$ = userHttpResponse$
+    .map(response => Actions.SetUser(response.body));
 
   // merge all actions and prepate state
   const state$ = Rx.Observable
-    .merge(user2ReceivedAction$)
+    .merge(userReceivedAction$)
     .scan((state, operation) => operation(state), initialState);
 
   return state$;
@@ -60,7 +59,8 @@ function view(state$) {
       div([
         h1('Home Page'),
         div([
-          state.user2 === {} ? h1('foo') : h2(state.user2.email)
+          h2(state.user.email),
+          button('.btn-home', 'Do Action Home')
         ])
       ])
     );
@@ -76,8 +76,15 @@ function Home(sources) {
   const sink$ = {
     DOM: vtree$,
     HTTP: actions.httpRequest$,
-    // share value with parent
-    value$: state$.pluck('user2')
+    // share events with parent
+    events$: Rx.Observable.empty(),
+    // share state with parent
+    state$: state$.map(state => {
+      return {
+        origin: 'home',
+        foo: state.user
+      };
+    })
   }
 
   return sink$;
