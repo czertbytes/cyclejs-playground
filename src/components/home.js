@@ -6,6 +6,9 @@ const LABEL_REQUEST_USER_2 = 'users_2';
 var initialState = {
   user: {
     email: 'loading ...'
+  },
+  parent: {
+    event: ''
   }
 };
 
@@ -13,10 +16,38 @@ const Actions = {
   SetUser: user => state => {
     state.user = user;
     return state;
+  },
+  SetParentEvent: event => state => {
+    state.parent = event;
+    return state;
   }
+};
+
+const originDecorator = obj => {
+  return {
+    ...obj,
+    origin: 'home'
+  };
+}
+
+const Events = {
+  State: state => {
+    return originDecorator({
+      foo: state.user
+    })
+  },
+  ButtonPressed: originDecorator({
+    event: 'button-pressed'
+  })
 }
 
 function intent(sources) {
+  // catch button event
+  const btnClicks$ = sources.DOM.select('.btn-home').events('click');
+
+  const events$ = btnClicks$
+    .map(() => Events.ButtonPressed);
+
   // make call to that url
   const userHttpRequest$ = Rx.Observable.just({
     url: 'http://jsonplaceholder.typicode.com/users/2',
@@ -31,11 +62,16 @@ function intent(sources) {
 
   return {
     httpRequest$,
-    httpResponses$$: sources.HTTP
-  }
+    httpResponses$$: sources.HTTP,
+    events$,
+    parentEvents$: sources.parentEvents$
+  };
 }
 
 function model(actions) {
+  const parentEventAction$ = actions.parentEvents$
+    .map(event => Actions.SetParentEvent(event));
+
   // filter our httpResponse
   const userHttpResponse$ = actions.httpResponses$$
     .filter(res$ => res$.request.label === LABEL_REQUEST_USER_2)
@@ -46,8 +82,11 @@ function model(actions) {
 
   // merge all actions and prepate state
   const state$ = Rx.Observable
-    .merge(userReceivedAction$)
+    .merge(
+      parentEventAction$,
+      userReceivedAction$)
     .scan((state, operation) => operation(state), initialState);
+
 
   return state$;
 }
@@ -58,10 +97,9 @@ function view(state$) {
     .map(state =>
       div([
         h1('Home Page'),
-        div([
-          h2(state.user.email),
-          button('.btn-home', 'Do Action Home')
-        ])
+        h2(`Value Home: ${state.user.email}`),
+        h2(`Event from Parent: ${state.parent.event}`),
+        button('.btn-home', 'Do Action Home')
       ])
     );
 
@@ -77,15 +115,10 @@ function Home(sources) {
     DOM: vtree$,
     HTTP: actions.httpRequest$,
     // share events with parent
-    events$: Rx.Observable.empty(),
+    events$: actions.events$,
     // share state with parent
-    state$: state$.map(state => {
-      return {
-        origin: 'home',
-        foo: state.user
-      };
-    })
-  }
+    state$: state$.map(state => Events.State(state))
+  };
 
   return sink$;
 }

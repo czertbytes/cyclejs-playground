@@ -1,5 +1,5 @@
 import Rx from 'rx';
-import {h, div, h1, h2, ul, li } from 'cycle-snabbdom';
+import {h, div, h1, h2, ul, li, button} from 'cycle-snabbdom';
 
 import Home from './components/home';
 import Page1 from './components/page1';
@@ -14,13 +14,16 @@ const LABEL_REQUEST_USER_1 = 'users_1';
 var initialState = {
   child: Home,
   app: {
-    foo: 'loading ...'
+    foo: 'loading ...',
+    event: ''
   },
   home: {
-    foo: 'loading ...'
+    foo: 'loading ...',
+    event: ''
   },
   page1: {
-    foo: 'loading ...'
+    foo: 'loading ...',
+    event: ''
   }
 };
 
@@ -37,9 +40,31 @@ const Actions = {
     state.home.foo = home.email;
     return state;
   },
+  SetHomeEvent: event => state => {
+    state.home.event = event.event;
+    return state;
+  },
   SetPage1State: page1 => state => {
     state.page1.foo = page1.email;
     return state;
+  },
+  SetPage1Event: event => state => {
+    state.page1.event = event.event;
+    return state;
+  },
+  DummyAction: state => {
+    return state;
+  }
+};
+
+const Events = {
+  ButtonPressed: {
+    origin: 'app',
+    event: 'app-button-pressed'
+  },
+  ButtonReset: {
+    origin: 'app',
+    event: ''
   }
 };
 
@@ -47,11 +72,29 @@ function intent(sources) {
   const {router} = sources;
   const match$ = router.define(ROUTES);
 
+  const btnSetClicks$ = sources.DOM.select('.btn-app-set').events('click');
+  const btnResetClicks$ = sources.DOM.select('.btn-app-reset').events('click');
+
+  // handle button events
+  const buttonPressedEvents$ = btnSetClicks$
+    .map(() => Events.ButtonPressed);
+
+  const buttonResetEvents$ = btnResetClicks$
+    .map(() => Events.ButtonReset);
+
+  // create parent events
+  const events$ = Rx.Observable
+    .merge(
+      buttonPressedEvents$,
+      buttonResetEvents$)
+    .shareReplay(1);  // new loaded child will get the last parent event
+
   // match the url and create child
   const children$ = match$
     .map(({path, value}) => value({
         ...sources,
-        router: router.path(path)
+        router: router.path(path),
+        parentEvents$: events$ // pass events to child
       }));
 
   // make call to that url
@@ -90,7 +133,7 @@ function model(actions) {
     .map(child => child);
 
   // state value from current child
-  const currentChildFooAction$ = currentChild$
+  const currentChildStateAction$ = currentChild$
     .flatMap(({state$}) => state$)
     .map(state => {
       switch (state.origin) {
@@ -103,16 +146,31 @@ function model(actions) {
       }
     });
 
+  // events from current child
+  const currentChildEventAction$ = currentChild$
+    .switchMap(({events$}) => events$)
+    .map(event => {
+      switch (event.origin) {
+        case 'home':
+          return Actions.SetHomeEvent(event);
+        case 'page1':
+          return Actions.SetPage1Event(event);
+        default:
+          console.log(`Unknown child event origin ${event.origin}`);
+      }
+    });
+
   // render current child
-  const currentChildAction$ = currentChild$
+  const currentChildRenderAction$ = currentChild$
     .map(child => Actions.Render(child));
 
   // merge all actions and prepare state
   const state$ = Rx.Observable
     .merge(
       userReceivedAction$,
-      currentChildFooAction$,
-      currentChildAction$)
+      currentChildEventAction$,
+      currentChildStateAction$,
+      currentChildRenderAction$)
     .scan((state, operation) => operation(state), initialState);
 
   return state$;
@@ -123,14 +181,21 @@ function view(state$) {
     .startWith(initialState)
     .map(state => {
       let {child} = state;
-      let {app: {foo: appFooValue}} = state;
-      let {home: {foo: homeFooValue}} = state;
-      let {page1: {foo: page1FooValue}} = state;
 
       return div([
-        h1(`App value: ${appFooValue}`),
-        h2(`Value from Home: ${homeFooValue}`),
-        h2(`Value from Page1: ${page1FooValue}`),
+        h1(`App value: ${state.app.foo}`),
+        ul([
+          li([
+            h('a', {props: {href: '#/home'}}, 'Home')
+          ]),
+          li([
+            h('a', {props: {href: '#/page1'}}, 'Page1')
+          ]),
+        ]),
+        button('.btn-app-set', 'App Action Set'),
+        button('.btn-app-reset', 'App Action Reset'),
+        h2(`Home value: ${state.home.foo}, event: ${state.home.event}`),
+        h2(`Page1 value: ${state.page1.foo} event: ${state.page1.event}`),
         child.DOM
       ]);
     });
