@@ -136,15 +136,18 @@ function model(actions) {
     .mergeAll();
 
   const userReceivedAction$ = userHttpResponse$
+    .do(response => console.log(`app: User http response`))
     .map(response => Actions.SetAppState(response.body));
 
   // current child
   const currentChild$ = actions.children$
+    .do(child => console.log(`app: Current child`))
     .map(child => child);
 
   // state value from current child
   const currentChildStateAction$ = currentChild$
     .flatMap(({state$}) => state$)
+    .do(state => console.log(`app: Current child state ${state.origin}`))
     .map(state => {
       switch (state.origin) {
         case 'home':
@@ -152,13 +155,14 @@ function model(actions) {
         case 'page1':
           return Actions.SetPage1State(state.foo);
         default:
-          console.log(`Unknown child state origin ${state.origin}`);
+          console.log(`app: Unknown child state origin ${state.origin}`);
       }
     });
 
   // events from current child
   const currentChildEventAction$ = currentChild$
     .switchMap(({events$}) => events$)
+    .do(event => console.log(`app: Current child event ${event.origin}`))
     .map(event => {
       switch (event.origin) {
         case 'home':
@@ -166,12 +170,13 @@ function model(actions) {
         case 'page1':
           return Actions.SetPage1Event(event);
         default:
-          console.log(`Unknown child event origin ${event.origin}`);
+          console.log(`app: Unknown child event origin ${event.origin}`);
       }
     });
 
   // render current child
   const currentChildRenderAction$ = currentChild$
+    .do(child => console.log(`app: Current child render`))
     .map(child => Actions.Render(child));
 
   // merge all actions and prepare state
@@ -189,6 +194,7 @@ function model(actions) {
 function view(state$) {
   const vtree$ = state$
     .startWith(initialState)
+    .do(state => console.log(`app: View`))
     .map(state => {
       let {child} = state;
 

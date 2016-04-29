@@ -70,6 +70,7 @@ function intent(sources) {
 
 function model(actions) {
   const parentEventAction$ = actions.parentEvents$
+    .do(response => console.log(`page1: parent event`))
     .map(event => Actions.SetParentEvent(event));
 
   // filter our httpResponse
@@ -78,6 +79,7 @@ function model(actions) {
     .mergeAll();
 
   const userReceivedAction$ = userHttpResponse$
+    .do(response => console.log(`page1: User http response`))
     .map(response => Actions.SetUser(response.body));
 
   // merge all actions and prepate state
@@ -93,6 +95,7 @@ function model(actions) {
 function view(state$) {
   const vtree$ = state$
     .startWith(initialState)
+    .do(state => console.log(`page1: View`))
     .map(state =>
       div([
         h1('Page1'),
