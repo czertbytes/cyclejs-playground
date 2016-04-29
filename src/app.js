@@ -1,5 +1,5 @@
 import Rx from 'rx';
-import {h, div, h1, h2, ul, li, button} from 'cycle-snabbdom';
+import {h, div, a, h1, h2, span, header, nav, main, button} from 'cycle-snabbdom';
 
 import Home from './components/home';
 import Page1 from './components/page1';
@@ -67,6 +67,16 @@ const Events = {
     event: ''
   }
 };
+
+function mdlElementUpgrade() {
+  return {
+    hook: {
+      insert: (vnode) => {
+        window.componentHandler.upgradeElement(vnode.elm)
+      }
+    }
+  };
+}
 
 function intent(sources) {
   const {router} = sources;
@@ -182,21 +192,34 @@ function view(state$) {
     .map(state => {
       let {child} = state;
 
-      return div([
-        h1(`App value: ${state.app.foo}`),
-        ul([
-          li([
-            h('a', {props: {href: '#/home'}}, 'Home')
-          ]),
-          li([
-            h('a', {props: {href: '#/page1'}}, 'Page1')
-          ]),
+      return h('div.mdl-layout.mdl-js-layout', mdlElementUpgrade(), [
+        header('.mdl-layout__header', [
+          div('.mdl-layout__header-row', [
+            span('.mdl-layout-title', 'Title'),
+            div('.mdl-layout-spacer', []),
+            nav('.mdl-navigation', [
+              a('.mdl-navigation__link', {props: {href: '#/home'}}, 'To Home'),
+              a('.mdl-navigation__link', {props: {href: '#/page1'}}, 'To Page1'),
+            ])
+          ])
         ]),
-        button('.btn-app-set', 'App Action Set'),
-        button('.btn-app-reset', 'App Action Reset'),
-        h2(`Home value: ${state.home.foo}, event: ${state.home.event}`),
-        h2(`Page1 value: ${state.page1.foo} event: ${state.page1.event}`),
-        child.DOM
+        div('.mdl-layout__drawer', [
+          span('.mdl-layout-title', 'Title'),
+          nav('.mdl-navigation', [
+            a('.mdl-navigation__link', {props: {href: '#/home'}}, 'To Home'),
+            a('.mdl-navigation__link', {props: {href: '#/page1'}}, 'To Page1'),
+          ])
+        ]),
+        main('.mdl-layout__content', [
+          h1(`App value: ${state.app.foo}`),
+          div([
+            button('.mdl-button.mdl-js-button.mdl-button--raised.mdl-js-ripple-effect.mdl-button--accent.btn-app-set', 'App Action Set'),
+            button('.mdl-button.mdl-js-button.mdl-button--raised.mdl-js-ripple-effect.mdl-button--accent.btn-app-reset', 'App Action Reset')
+          ]),
+          h2(`Home value: ${state.home.foo}, event: ${state.home.event}`),
+          h2(`Page1 value: ${state.page1.foo} event: ${state.page1.event}`),
+          child.DOM
+        ])
       ]);
     });
 
