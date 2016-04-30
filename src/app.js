@@ -3,6 +3,7 @@ import {h, div, a, h1, h2, span, header, nav, main, button} from 'cycle-snabbdom
 
 import Home from './components/home';
 import Page1 from './components/page1';
+import Signin from './components/signin';
 
 const ROUTES = {
   '/': Home,
@@ -12,7 +13,10 @@ const ROUTES = {
 const LABEL_REQUEST_USER_1 = 'users_1';
 
 var initialState = {
-  child: Home,
+  page: {
+    current: Home,
+    signin: Signin
+  },
   app: {
     foo: 'loading ...',
     event: ''
@@ -24,12 +28,17 @@ var initialState = {
   page1: {
     foo: 'loading ...',
     event: ''
-  }
+  },
+  user: {}
 };
 
 const Actions = {
-  Render: child => state => {
-    state.child = child;
+  RenderCurrent: component => state => {
+    state.page.current = component;
+    return state;
+  },
+  RenderSignin: component => state => {
+    state.page.signin = component;
     return state;
   },
   SetAppState: app => state => {
@@ -50,6 +59,10 @@ const Actions = {
   },
   SetPage1Event: event => state => {
     state.page1.event = event.event;
+    return state;
+  },
+  SetUserValue: user => state => {
+    state.user = user;
     return state;
   },
   DummyAction: state => {
@@ -129,7 +142,7 @@ function intent(sources) {
   return actions;
 }
 
-function model(actions) {
+function model(actions, signin$) {
   // filter our httpResponse
   const userHttpResponse$ = actions.httpResponses$$
     .filter(res$ => res$.request.label === LABEL_REQUEST_USER_1)
@@ -177,7 +190,14 @@ function model(actions) {
   // render current child
   const currentChildRenderAction$ = currentChild$
     .do(child => console.log(`app: Current child render`))
-    .map(child => Actions.Render(child));
+    .map(child => Actions.RenderCurrent(child));
+
+  // signin user value
+  const signinStateAction$ = signin$.state$
+    .do(state => console.log(`app: Signin child state ${state.user.token}`))
+    .map(state => Actions.SetUserValue(state.user));
+
+  const signinRenderAction$ = Rx.Observable.just(Actions.RenderSignin(signin$))
 
   // merge all actions and prepare state
   const state$ = Rx.Observable
@@ -185,7 +205,9 @@ function model(actions) {
       userReceivedAction$,
       currentChildEventAction$,
       currentChildStateAction$,
-      currentChildRenderAction$)
+      currentChildRenderAction$,
+      signinStateAction$,
+      signinRenderAction$)
     .scan((state, operation) => operation(state), initialState);
 
   return state$;
@@ -196,7 +218,7 @@ function view(state$) {
     .startWith(initialState)
     .do(state => console.log(`app: View`))
     .map(state => {
-      let {child} = state;
+      let {page} = state;
 
       return h('div.mdl-layout.mdl-js-layout', mdlElementUpgrade(), [
         header('.mdl-layout__header', [
@@ -217,6 +239,7 @@ function view(state$) {
           ])
         ]),
         main('.mdl-layout__content', [
+          page.signin.DOM,
           h1(`App value: ${state.app.foo}`),
           div([
             button('.mdl-button.mdl-js-button.mdl-button--raised.mdl-js-ripple-effect.mdl-button--accent.btn-app-set', 'App Action Set'),
@@ -224,7 +247,7 @@ function view(state$) {
           ]),
           h2(`Home value: ${state.home.foo}, event: ${state.home.event}`),
           h2(`Page1 value: ${state.page1.foo} event: ${state.page1.event}`),
-          child.DOM
+          page.current.DOM
         ])
       ]);
     });
@@ -233,8 +256,10 @@ function view(state$) {
 }
 
 function App(sources) {
+  const signin$ = Signin(sources);
+
   const actions = intent(sources);
-  const state$ = model(actions);
+  const state$ = model(actions, signin$);
   const vtree$ = view(state$);
 
   const sink$ = {
